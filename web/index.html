@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self'; connect-src 'self' ws:;script-src 'self' https://* 'unsafe-inline';style-src 'self' https://* 'unsafe-inline'">
+
+    <title>vrc-chatbox-osc</title>
+</head>
+
+<body>
+    <div class="top-container">
+        <textarea autofocus type="aera" style="width: 100%;" size="144" id="text"  rows="20" cols="33"></textarea>
+
+    </div>
+	<button id="button" style="width: 100%;font-size: 24px;">发送</button>
+
+
+
+</body>
+
+<script type="text/javascript">
+
+
+    let socket = undefined;
+    let isOpen = false
+
+    openWebSocket()
+
+
+    let button = document.getElementById('button')
+
+    let text = document.getElementById('text')
+
+
+
+   function handleKeyCode(event) {
+      if (event.keyCode == 13) {
+        if (!event.ctrlKey) {
+          event.preventDefault();
+            socket.send(text.value)
+	   text.value = ''
+        } else {
+          text.value = text.value + '\n';
+        }
+      }
+    }
+text.addEventListener('keydown',handleKeyCode)
+
+    button.addEventListener('click', (e) => {
+            socket.send(text.value)
+	   text.value = ''
+    })
+
+
+
+    function openWebSocket() {
+        socket = new WebSocket(`ws://${window.location.host}/toSemSocket`);
+
+        socket.addEventListener("message", function (event) {
+        });
+
+        socket.addEventListener('close', () => {
+            isOpen = false
+            openWebSocket()
+        })
+
+        socket.addEventListener('error', () => {
+            isOpen = false
+            openWebSocket()
+        });
+
+        socket.addEventListener('open', () => {
+            isOpen = true
+        })
+
+
+
+    }
+</script>
+
+</html>
