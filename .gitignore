@@ -1,1 +1,5 @@
-node_modules
+settings.json
+*.zip
+native-asm/dist/
+native-asm/release/
+node_modules/

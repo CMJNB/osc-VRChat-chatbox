@@ -1,66 +1,111 @@
-# VRC Chatbox OSC Tool
+# VRC Chatbox OSC
 
-## Project Overview
+A tiny Windows native tool that uses a browser UI to send translated text to the VRChat chatbox through OSC.
 
-This is an OSC chatbox server-side tool for **VRChat** that allows sending chat content from web pages or mobile devices to the VRChat game.
+This version has been rewritten from Node.js to 32-bit Win32 assembly and is built with FASM. The release is a single executable: it starts a local HTTP server and opens the system default browser. It does not package Node.js, Chromium, WebView, or any browser runtime.
 
----
+[中文 README](README.md)
 
-## 🚀 Quick Start
+## Features
 
-1. **Initialize Dependencies**
-   ```bash
-   npm install
-   ```
+- Single executable release, currently about 11 KB.
+- Uses the system default browser for the UI.
+- LAN access: the server listens on `0.0.0.0:19001`.
+- Sends OSC to VRChat at `127.0.0.1:9000` with address `/chatbox/input`.
+- Default source language is Chinese, default target language is English.
+- Auto-translates text and sends:
 
-2. **Install and Package**
-   ```bash
-   npm install -g pkg
-   # Or use cnpm
-   # cnpm i -g pkg
-   ```
+  ```text
+  original text
+  translated text
+  ```
 
-   Generate executable file:
-   ```bash
-   pkg -t win app.js -o vrc-chatbox-osc.exe
-   ```
+- Free public translation through MyMemory.
+- Optional AI translation through OpenAI-compatible chat completion APIs.
+- Page-session counting: if multiple tabs or LAN devices are open, the background service exits only when the last page closes.
 
-3. **Common Packaging Issues**
-   If you encounter errors like "Unable to download cache files", please manually download the corresponding Node runtime file. Based on the error message (e.g., `{ "tag": "v3.4", "name": "node-v16.16.0-win-x64" }`), download from GitHub and place it in the pkg cache directory:
-   `C:\Users\[username]\.pkg-cache\v3.4\`.
-   If you have set the `PKG_CACHE_PATH` environment variable, place it in the corresponding version folder under that path.
-   **Rename** to `fetched-v16.16.0-win-x64`.
+## Supported AI APIs
 
-4. **Run the Program**
-   - Copy the generated `vrc-chatbox-osc.exe` to the project's `build` folder and overwrite.
-   - Start: Double-click `startApp.vbs` (no command line window).
-   - Close: Double-click `endApp.vbs`.
+The AI mode uses the OpenAI-compatible Chat Completions request shape:
 
----
+```text
+POST <base-url>/chat/completions
+Authorization: Bearer <api-key>
+```
 
-## 🌐 Access and Connection
+Built-in presets:
 
-- Local Access: Open `http://127.0.0.1:19001` in your browser.
-- Mobile Access (Same Wi-Fi):
-  1. Open Command Prompt (`cmd`) on your computer.
-  2. Run `ipconfig` to find the IPv4 address, e.g., `192.168.1.100`.
-  3. Enter this in your mobile browser:
-     `http://[computer-IP-address]:19001` (e.g., `http://192.168.1.100:19001`).
+| Provider | Base URL | Default model |
+| --- | --- | --- |
+| ChatGPT / OpenAI | `https://api.openai.com/v1` | `gpt-4o-mini` |
+| DeepSeek | `https://api.deepseek.com` | `deepseek-chat` |
+| Tencent Hunyuan | `https://api.hunyuan.cloud.tencent.com/v1` | `hunyuan-turbos-latest` |
+| Custom | user supplied | user supplied |
 
----
+Tencent Yuanbao itself is usually a consumer app, not a general third-party API. If you have Tencent model API access, use the Tencent Hunyuan preset or the custom OpenAI-compatible option.
 
-## ⚙️ Configuration
+## Security Note
 
-The main configuration file is `config/default.js`. Common configuration options and their default values are listed below:
+AI settings are saved beside the executable in:
 
-| Configuration Item | Description | Default Value |
-|--------|------|--------|
-| `server.port` | Server startup port. Requires restart after modification. | `19001` |
-| `static` | Static file hosting configuration. | — |
-| `static.path` | Physical path of the hosted folder. | `"./public"` |
-| `static.router` | Route prefix. | `"/web"` |
-| `defaultOpenBrowser` | Whether to automatically open the browser page on startup. | `true` |
-| `defaultBrowser` | Specify the browser to launch (e.g., `"chrome"`), leave empty to use system default. | `""` |
+```text
+settings.json
+```
 
-**Static Hosting Example**:
-After configuring `{ path: './public', router: '/web' }`, you can access files under `./public` via `http://127.0.0.1:3000/web/`.
+This file may contain your API key. Do not copy it, upload it, commit it, or send it to anyone.
+
+## Usage
+
+1. Enable OSC in VRChat.
+2. Run `vrc-chatbox-osc.exe`.
+3. Windows opens `http://127.0.0.1:19001` in your default browser.
+4. The default direction is Chinese to English. You can change it on the page.
+5. Type text and press `Enter` to translate and send.
+6. Press `Ctrl + Enter` for a newline.
+
+For phone or LAN access, open this on another device in the same network:
+
+```text
+http://<this-pc-lan-ip>:19001
+```
+
+Windows Firewall may ask for network permission on first run. Allow it if you need LAN access.
+
+## Build
+
+The repository includes a small portable FASM toolchain under `tools/fasm`.
+
+```bat
+cd native-asm
+release.bat
+```
+
+Output:
+
+```text
+native-asm\release\vrc-chatbox-osc.exe
+```
+
+## Project Layout
+
+```text
+native-asm/
+  server.asm      Main Win32 assembly source, including the embedded browser UI
+  build.bat       Builds dist\vrc-chatbox-osc-asm.exe
+  release.bat     Builds and copies release\vrc-chatbox-osc.exe
+  README.md       Native build notes
+
+tools/fasm/
+  FASM.EXE        Portable assembler
+  INCLUDE/        Win32 include files used by FASM
+```
+
+## Release Packaging
+
+The release asset should contain only:
+
+```text
+vrc-chatbox-osc.exe
+```
+
+Do not include `settings.json` in a release package.
