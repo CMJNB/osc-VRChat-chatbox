@@ -6,8 +6,13 @@ The program does not package a browser or webview. It starts a tiny local HTTP
 server, then asks Windows to open the system default browser with
 `ShellExecute("open", "http://127.0.0.1:19001")`.
 
-The HTTP server listens on `0.0.0.0:19001`, so devices on the same LAN can open
-the page with:
+By default, the HTTP server listens on `127.0.0.1:19001` only. This keeps the
+network surface small and helps avoid Windows reputation/heuristic warnings for
+a tiny unsigned executable that opens a local server.
+
+If you need access from devices on the same LAN, click the LAN button on the
+page, or start the executable with `--lan` or `/lan`. In LAN mode it listens on
+`0.0.0.0:19001`, so devices on the same network can open the page with:
 
 ```text
 http://<this-pc-lan-ip>:19001

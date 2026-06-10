@@ -12,6 +12,8 @@ INVALID_SOCKET = -1
 session_slots = 16
 RT_ICON = 3
 RT_GROUP_ICON = 14
+RT_VERSION = 16
+RT_MANIFEST = 24
 LANG_NEUTRAL = 0
 
 section '.text' code readable executable
@@ -33,6 +35,21 @@ start:
 
         invoke  htons,19001
         mov     word [server_addr+2],ax
+        invoke  GetCommandLine
+        mov     esi,eax
+        call    command_line_has_lan
+        cmp     eax,1
+        jne     bind_localhost
+        mov     dword [lan_enabled],1
+        mov     dword [server_addr+4],0
+        jmp     bind_ready
+
+bind_localhost:
+        invoke  inet_addr,localhost
+        mov     dword [server_addr+4],eax
+
+bind_ready:
+        invoke  setsockopt,[server_socket],0FFFFh,4,reuse_opt,4
         invoke  bind,[server_socket],server_addr,16
         cmp     eax,0
         jne     open_existing_and_exit
@@ -88,6 +105,10 @@ accept_loop:
         call    is_post_heartbeat
         cmp     eax,1
         je      handle_heartbeat
+
+        call    is_post_lan_enable
+        cmp     eax,1
+        je      handle_lan_enable
 
         call    is_get_lan_ip
         cmp     eax,1
@@ -172,6 +193,11 @@ handle_session_open:
 
 handle_session_close:
         invoke  send,[client_socket],http_204,http_204_len,0
+        jmp     close_client
+
+handle_lan_enable:
+        call    enable_lan_listener
+        call    serve_lan_ip
         jmp     close_client
 
 handle_lan_ip:
@@ -261,6 +287,15 @@ is_post_heartbeat:
         movzx   eax,al
         ret
 
+is_post_lan_enable:
+        mov     esi,recv_buf
+        mov     edi,post_lan_enable
+        mov     ecx,post_lan_enable_len
+        repe    cmpsb
+        sete    al
+        movzx   eax,al
+        ret
+
 is_get_lan_ip:
         mov     esi,recv_buf
         mov     edi,get_lan_ip
@@ -268,6 +303,89 @@ is_get_lan_ip:
         repe    cmpsb
         sete    al
         movzx   eax,al
+        ret
+
+command_line_has_lan:
+.scan:
+        mov     al,[esi]
+        test    al,al
+        jz      .no
+        cmp     al,'-'
+        je      .check_dash
+        cmp     al,'/'
+        je      .check_slash
+        inc     esi
+        jmp     .scan
+.check_dash:
+        cmp     byte [esi+1],'-'
+        jne     .next
+        cmp     byte [esi+2],'l'
+        jne     .next
+        cmp     byte [esi+3],'a'
+        jne     .next
+        cmp     byte [esi+4],'n'
+        jne     .next
+        jmp     .yes
+.check_slash:
+        cmp     byte [esi+1],'l'
+        jne     .next
+        cmp     byte [esi+2],'a'
+        jne     .next
+        cmp     byte [esi+3],'n'
+        jne     .next
+        jmp     .yes
+.next:
+        inc     esi
+        jmp     .scan
+.yes:
+        mov     eax,1
+        ret
+.no:
+        xor     eax,eax
+        ret
+
+enable_lan_listener:
+        cmp     dword [lan_enabled],1
+        je      .done
+        invoke  closesocket,[server_socket]
+        invoke  socket,AF_INET,SOCK_STREAM,IPPROTO_TCP
+        mov     [server_socket],eax
+        cmp     eax,INVALID_SOCKET
+        je      .fallback
+        invoke  setsockopt,[server_socket],0FFFFh,4,reuse_opt,4
+        invoke  htons,19001
+        mov     word [server_addr+2],ax
+        mov     dword [server_addr+4],0
+        invoke  bind,[server_socket],server_addr,16
+        cmp     eax,0
+        jne     .fallback
+        invoke  setsockopt,[server_socket],0FFFFh,1006h,accept_timeout,4
+        invoke  listen,[server_socket],8
+        mov     dword [lan_enabled],1
+        ret
+.fallback:
+        call    restore_localhost_listener
+.done:
+        ret
+
+restore_localhost_listener:
+        mov     dword [lan_enabled],0
+        invoke  closesocket,[server_socket]
+        invoke  socket,AF_INET,SOCK_STREAM,IPPROTO_TCP
+        mov     [server_socket],eax
+        cmp     eax,INVALID_SOCKET
+        je      .done
+        invoke  setsockopt,[server_socket],0FFFFh,4,reuse_opt,4
+        invoke  htons,19001
+        mov     word [server_addr+2],ax
+        invoke  inet_addr,localhost
+        mov     dword [server_addr+4],eax
+        invoke  bind,[server_socket],server_addr,16
+        cmp     eax,0
+        jne     .done
+        invoke  setsockopt,[server_socket],0FFFFh,1006h,accept_timeout,4
+        invoke  listen,[server_socket],8
+.done:
         ret
 
 read_heartbeat_id:
@@ -507,6 +625,8 @@ serve_settings:
         ret
 
 serve_lan_ip:
+        cmp     dword [lan_enabled],1
+        jne     .fallback
         call    find_host_lan_ip
         cmp     eax,1
         je      .send_best
@@ -741,6 +861,8 @@ post_session_close db 'POST /session/close '
 post_session_close_len = $ - post_session_close
 post_heartbeat db 'POST /heartbeat'
 post_heartbeat_len = $ - post_heartbeat
+post_lan_enable db 'POST /lan-enable '
+post_lan_enable_len = $ - post_lan_enable
 get_lan_ip db 'GET /lan-ip '
 get_lan_ip_len = $ - get_lan_ip
 content_length_header db 'CONTENT-LENGTH:'
@@ -764,6 +886,7 @@ http_204_len = $ - http_204
 
 empty_json db '{}'
 empty_json_len = $ - empty_json
+reuse_opt dd 1
 lan_fallback_json db '{"ip":"127.0.0.1"}'
 lan_fallback_json_len = $ - lan_fallback_json
 lan_json db '{"ip":"'
@@ -782,9 +905,9 @@ html db '<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta nam
      db 'main{width:min(760px,100%);background:white;border:1px solid #d8dee8;border-radius:8px;box-shadow:0 18px 60px rgb(15 23 42/.10);overflow:hidden}'
      db 'header{display:flex;justify-content:space-between;gap:16px;padding:18px 20px;border-bottom:1px solid #d8dee8}h1{font-size:18px;margin:0}.s{color:#667085;font-size:13px}.s:before{content:"";display:inline-block;width:8px;height:8px;border-radius:99px;background:#0f766e;margin-right:8px}'
      db '.c{padding:20px}textarea{width:100%;min-height:260px;resize:vertical;border:1px solid #d8dee8;border-radius:8px;padding:16px;background:#fbfcfe;color:#111827;font:inherit;font-size:18px;line-height:1.55;outline:0}textarea:focus{border-color:#0f766e;box-shadow:0 0 0 3px rgb(15 118 110/.16)}'
-     db '.row{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:12px}.row2{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px}.row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:12px}select,input{width:100%;border:1px solid #d8dee8;border-radius:8px;padding:10px;background:#fbfcfe;color:#111827}label{display:block;color:#667085;font-size:12px;margin:0 0 5px}.lan{display:flex;justify-content:space-between;gap:12px;align-items:center;padding:10px 12px;border:1px solid #d8dee8;border-radius:8px;margin-bottom:12px;background:#fbfcfe}.toggle{display:flex;align-items:center;gap:8px;margin-bottom:12px;color:#111827;font-size:13px}.toggle input{width:auto}.lan b{font-size:13px}.lan-note{display:block;margin-top:3px;color:#667085;font-size:12px}.lan code{font-size:13px;color:#115e59}.a{display:flex;align-items:center;justify-content:space-between;gap:14px;margin-top:14px}.h,.m,.warn{color:#667085;font-size:13px}.warn{padding:10px;border:1px solid #fecdca;background:#fff5f4;color:#b42318;border-radius:8px;margin:0 0 12px}.hide{display:none}.linkbtn{display:flex;align-items:center;justify-content:center;border-radius:8px;padding:10px 12px;background:#eef8f6;color:#115e59;text-decoration:none;font-size:13px;font-weight:650}button{min-width:132px;border:0;border-radius:8px;padding:12px 18px;background:#0f766e;color:white;font:inherit;font-weight:650;cursor:pointer}button:hover{background:#115e59}button:active{transform:translateY(1px)}button:disabled{cursor:wait;opacity:.72}.e{color:#b42318}@media(max-width:560px){body{padding:12px}header,.a,.row,.row2,.row3,.lan{align-items:stretch;grid-template-columns:1fr;flex-direction:column}button{width:100%}}</style></head>'
-     db '<body><main><header><h1>VRC Chatbox OSC</h1><div class="s" id="status">本地服务已连接</div></header><section class="c"><div class="lan"><div><b>局域网访问地址</b><span class="lan-note">可在同一路由其他设备访问，如连接路由器wifi的手机</span></div><code id="lan">正在检测...</code></div><label class="toggle"><input id="trOn" type="checkbox">启用翻译</label><div id="trBox" class="hide"><div class="row3"><div><label>源语言</label><select id="src"><option value="zh-CN">简体中文</option><option value="en">English</option><option value="ja">日本語</option><option value="ko">한국어</option><option value="fr">Français</option><option value="de">Deutsch</option><option value="es">Español</option></select></div><div><label>目标语言</label><select id="dst"><option value="en">English</option><option value="zh-CN">简体中文</option><option value="ja">日本語</option><option value="ko">한국어</option><option value="fr">Français</option><option value="de">Deutsch</option><option value="es">Español</option></select></div><div><label>翻译服务</label><select id="provider"><option value="mymemory">MyMemory 免费公开 API</option><option value="openai">ChatGPT / OpenAI</option><option value="deepseek">DeepSeek</option><option value="hunyuan">腾讯混元</option><option value="custom">自定义 OpenAI 兼容 API</option></select></div></div><div class="warn">Key 会保存到本机 settings.json。不要把这个文件复制或发送给任何人。若 MyMemory 翻译失败或提示额度不足，请尝试填写 email，或自行获取 key 后使用。</div><div id="mmBox" class="row"><input id="mmEmail" placeholder="MyMemory email，可提升免费额度"><input id="mmKey" placeholder="MyMemory key，可选"><a class="linkbtn" target="_blank" href="https://mymemory.translated.net/doc/keygen.php">获取 MyMemory key</a></div><div id="aiBox" class="row hide"><input id="endpoint" placeholder="AI Base URL，例如 https://api.openai.com/v1"><input id="model" placeholder="模型，例如 gpt-4o-mini / deepseek-chat"><input id="key" placeholder="AI API Key"></div></div><textarea id="text" autofocus placeholder="输入要直接发送到 VRChat Chatbox 的文字。"></textarea><div class="a"><div class="h" id="hint">Enter 发送，Ctrl + Enter 换行</div><button id="button" type="button">发送</button></div><div class="m" id="message"></div></section></main>'
-     db '<script>const $=id=>document.getElementById(id),b=$("button"),t=$("text"),m=$("message"),s=$("status"),lan=$("lan"),trOn=$("trOn"),trBox=$("trBox"),hint=$("hint"),src=$("src"),dst=$("dst"),p=$("provider"),ep=$("endpoint"),model=$("model"),key=$("key"),mmEmail=$("mmEmail"),mmKey=$("mmKey"),mmBox=$("mmBox"),aiBox=$("aiBox");let timer=0;const sid=(Date.now().toString(36)+Math.random().toString(36).slice(2,10)).slice(0,31);function beat(){fetch("/heartbeat?id="+encodeURIComponent(sid),{method:"POST"}).catch(()=>{})}beat();setInterval(beat,3000);fetch("/lan-ip").then(r=>r.json()).then(j=>lan.textContent="http://"+j.ip+":19001").catch(()=>lan.textContent="http://本机局域网IP:19001");function showBoxes(){let on=trOn.checked,mm=p.value==="mymemory";trBox.className=on?"":"hide";mmBox.className=on&&mm?"row":"row hide";aiBox.className=on&&!mm?"row":"row hide";b.textContent=on?"翻译发送":"发送";hint.textContent=on?"Enter 翻译并发送，Ctrl + Enter 换行":"Enter 发送，Ctrl + Enter 换行";t.placeholder=on?"输入源语言。发送时会自动翻译，并把译文换行拼接到源语言后面。":"输入要直接发送到 VRChat Chatbox 的文字。"}function preset(force){const ps={openai:["https://api.openai.com/v1","gpt-4o-mini"],deepseek:["https://api.deepseek.com","deepseek-chat"],hunyuan:["https://api.hunyuan.cloud.tencent.com/v1","hunyuan-turbos-latest"]}[p.value];if(!ps)return;if(force||!ep.value)ep.value=ps[0];if(force||!model.value)model.value=ps[1]}async function load(){try{const r=await fetch("/settings");const j=await r.json();trOn.checked=!!j.translate;src.value=j.src||src.value;dst.value=j.dst||dst.value;p.value=j.provider||p.value;ep.value=j.endpoint||"";model.value=j.model||"";key.value=j.key||"";mmEmail.value=j.mmEmail||"";mmKey.value=j.mmKey||"";preset(false);showBoxes()}catch(e){showBoxes()}}async function save(){const j={translate:trOn.checked,src:src.value,dst:dst.value,provider:p.value,endpoint:ep.value,model:model.value,key:key.value,mmEmail:mmEmail.value,mmKey:mmKey.value};try{await fetch("/settings",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(j)})}catch(e){}}trOn.addEventListener("change",()=>{showBoxes();save()});p.addEventListener("change",()=>{preset(true);showBoxes();save()});[src,dst,ep,model,key,mmEmail,mmKey].forEach(x=>x.addEventListener("change",save));[key,ep,model,mmEmail,mmKey].forEach(x=>x.addEventListener("input",()=>{clearTimeout(timer);timer=setTimeout(save,600)}));async function tr(v){if(p.value!=="mymemory")return trAI(v);let u="https://api.mymemory.translated.net/get?q="+encodeURIComponent(v)+"&langpair="+encodeURIComponent(src.value+"|"+dst.value);if(mmEmail.value)u+="&de="+encodeURIComponent(mmEmail.value);if(mmKey.value)u+="&key="+encodeURIComponent(mmKey.value);let r=await fetch(u);let j=await r.json();return j.responseData&&j.responseData.translatedText?j.responseData.translatedText:""}function chatUrl(){let u=ep.value.trim().replace(/\/+$/,"");return u.endsWith("/chat/completions")?u:u+"/chat/completions"}async function trAI(v){if(!ep.value||!model.value||!key.value)throw Error("missing ai settings");let r=await fetch(chatUrl(),{method:"POST",headers:{"Content-Type":"application/json","Authorization":"Bearer "+key.value},body:JSON.stringify({model:model.value,messages:[{role:"system",content:"Translate the user text to "+dst.value+". Return only the translation."},{role:"user",content:v}]})});let j=await r.json();return j.choices&&j.choices[0]&&j.choices[0].message?j.choices[0].message.content:""}async function sendText(){const v=t.value.trim();if(!v){m.textContent="请输入内容后再发送。";m.className="m e";return}b.disabled=true;m.textContent=trOn.checked?"翻译中...":"发送中...";m.className="m";try{await save();const tv=trOn.checked?await tr(v):"";const out=tv?v+"\n"+tv:v;const r=await fetch("/send",{method:"POST",headers:{"Content-Type":"text/plain;charset=utf-8"},body:out});if(!r.ok)throw Error();t.value="";m.textContent=trOn.checked?"已翻译并发送到 VRChat。":"已发送到 VRChat。";s.textContent="刚刚发送成功"}catch(e){m.textContent=e.message==="missing ai settings"?"请先填写 AI endpoint、model 和 API Key。":trOn.checked?"翻译失败或发送失败。若使用 MyMemory，请尝试填写 email，或点击按钮自行获取 key 后使用。":"发送失败，请确认 VRChat OSC 已开启。";m.className="m e";s.textContent="连接异常"}finally{b.disabled=false;t.focus()}}t.addEventListener("keydown",e=>{if(e.key==="Enter"&&!e.ctrlKey){e.preventDefault();sendText()}});b.addEventListener("click",sendText);showBoxes();load();</script></body></html>'
+     db '.row{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:12px}.row2{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px}.row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:12px}select,input{width:100%;border:1px solid #d8dee8;border-radius:8px;padding:10px;background:#fbfcfe;color:#111827}label{display:block;color:#667085;font-size:12px;margin:0 0 5px}.lan{display:flex;justify-content:space-between;gap:12px;align-items:center;padding:10px 12px;border:1px solid #d8dee8;border-radius:8px;margin-bottom:12px;background:#fbfcfe}.toggle{display:flex;align-items:center;gap:8px;margin-bottom:12px;color:#111827;font-size:13px}.toggle input{width:auto}.lan b{font-size:13px}.lan-note{display:block;margin-top:3px;color:#667085;font-size:12px}.lan code{font-size:13px;color:#115e59}.lan-actions{display:flex;gap:8px;align-items:center}.lan button{min-width:0;padding:9px 12px;font-size:13px}.a{display:flex;align-items:center;justify-content:space-between;gap:14px;margin-top:14px}.h,.m,.warn{color:#667085;font-size:13px}.warn{padding:10px;border:1px solid #fecdca;background:#fff5f4;color:#b42318;border-radius:8px;margin:0 0 12px}.hide{display:none}.linkbtn{display:flex;align-items:center;justify-content:center;border-radius:8px;padding:10px 12px;background:#eef8f6;color:#115e59;text-decoration:none;font-size:13px;font-weight:650}button{min-width:132px;border:0;border-radius:8px;padding:12px 18px;background:#0f766e;color:white;font:inherit;font-weight:650;cursor:pointer}button:hover{background:#115e59}button:active{transform:translateY(1px)}button:disabled{cursor:wait;opacity:.72}.e{color:#b42318}@media(max-width:560px){body{padding:12px}header,.a,.row,.row2,.row3,.lan{align-items:stretch;grid-template-columns:1fr;flex-direction:column}.lan-actions{align-items:stretch;flex-direction:column}button{width:100%}}</style></head>'
+     db '<body><main><header><h1>VRC Chatbox OSC</h1><div class="s" id="status">本地服务已连接</div></header><section class="c"><div class="lan"><div><b>局域网访问地址</b><span class="lan-note">可在同一路由其他设备访问，如连接路由器wifi的手机</span></div><div class="lan-actions"><code id="lan">仅本机</code><button id="lanBtn" type="button">允许局域网连接</button></div></div><label class="toggle"><input id="trOn" type="checkbox">启用翻译</label><div id="trBox" class="hide"><div class="row3"><div><label>源语言</label><select id="src"><option value="zh-CN">简体中文</option><option value="en">English</option><option value="ja">日本語</option><option value="ko">한국어</option><option value="fr">Français</option><option value="de">Deutsch</option><option value="es">Español</option></select></div><div><label>目标语言</label><select id="dst"><option value="en">English</option><option value="zh-CN">简体中文</option><option value="ja">日本語</option><option value="ko">한국어</option><option value="fr">Français</option><option value="de">Deutsch</option><option value="es">Español</option></select></div><div><label>翻译服务</label><select id="provider"><option value="mymemory">MyMemory 免费公开 API</option><option value="openai">ChatGPT / OpenAI</option><option value="deepseek">DeepSeek</option><option value="hunyuan">腾讯混元</option><option value="custom">自定义 OpenAI 兼容 API</option></select></div></div><div class="warn">Key 会保存到本机 settings.json。不要把这个文件复制或发送给任何人。若 MyMemory 翻译失败或提示额度不足，请尝试填写 email，或自行获取 key 后使用。</div><div id="mmBox" class="row"><input id="mmEmail" placeholder="MyMemory email，可提升免费额度"><input id="mmKey" placeholder="MyMemory key，可选"><a class="linkbtn" target="_blank" href="https://mymemory.translated.net/doc/keygen.php">获取 MyMemory key</a></div><div id="aiBox" class="row hide"><input id="endpoint" placeholder="AI Base URL，例如 https://api.openai.com/v1"><input id="model" placeholder="模型，例如 gpt-4o-mini / deepseek-chat"><input id="key" placeholder="AI API Key"></div></div><textarea id="text" autofocus placeholder="输入要直接发送到 VRChat Chatbox 的文字。"></textarea><div class="a"><div class="h" id="hint">Enter 发送，Ctrl + Enter 换行</div><button id="button" type="button">发送</button></div><div class="m" id="message"></div></section></main>'
+     db '<script>const $=id=>document.getElementById(id),b=$("button"),t=$("text"),m=$("message"),s=$("status"),lan=$("lan"),lanBtn=$("lanBtn"),trOn=$("trOn"),trBox=$("trBox"),hint=$("hint"),src=$("src"),dst=$("dst"),p=$("provider"),ep=$("endpoint"),model=$("model"),key=$("key"),mmEmail=$("mmEmail"),mmKey=$("mmKey"),mmBox=$("mmBox"),aiBox=$("aiBox");let timer=0;const sid=(Date.now().toString(36)+Math.random().toString(36).slice(2,10)).slice(0,31);function beat(){fetch("/heartbeat?id="+encodeURIComponent(sid),{method:"POST"}).catch(()=>{})}beat();setInterval(beat,3000);async function refreshLan(){try{const r=await fetch("/lan-ip");const j=await r.json();const on=j.ip!=="127.0.0.1";lan.textContent=on?"http://"+j.ip+":19001":"仅本机";lanBtn.disabled=on;lanBtn.textContent=on?"已允许":"允许局域网连接"}catch(e){lan.textContent="仅本机";lanBtn.disabled=false;lanBtn.textContent="允许局域网连接"}}async function enableLan(){lanBtn.disabled=true;lanBtn.textContent="正在开启";try{const r=await fetch("/lan-enable",{method:"POST"});const j=await r.json();const on=j.ip!=="127.0.0.1";lan.textContent=on?"http://"+j.ip+":19001":"开启失败";lanBtn.disabled=on;lanBtn.textContent=on?"已允许":"重试";s.textContent=on?"已允许局域网连接":"局域网连接开启失败"}catch(e){lan.textContent="开启失败";lanBtn.disabled=false;lanBtn.textContent="重试"}}refreshLan();function showBoxes(){let on=trOn.checked,mm=p.value==="mymemory";trBox.className=on?"":"hide";mmBox.className=on&&mm?"row":"row hide";aiBox.className=on&&!mm?"row":"row hide";b.textContent=on?"翻译发送":"发送";hint.textContent=on?"Enter 翻译并发送，Ctrl + Enter 换行":"Enter 发送，Ctrl + Enter 换行";t.placeholder=on?"输入源语言。发送时会自动翻译，并把译文换行拼接到源语言后面。":"输入要直接发送到 VRChat Chatbox 的文字。"}function preset(force){const ps={openai:["https://api.openai.com/v1","gpt-4o-mini"],deepseek:["https://api.deepseek.com","deepseek-chat"],hunyuan:["https://api.hunyuan.cloud.tencent.com/v1","hunyuan-turbos-latest"]}[p.value];if(!ps)return;if(force||!ep.value)ep.value=ps[0];if(force||!model.value)model.value=ps[1]}async function load(){try{const r=await fetch("/settings");const j=await r.json();trOn.checked=!!j.translate;src.value=j.src||src.value;dst.value=j.dst||dst.value;p.value=j.provider||p.value;ep.value=j.endpoint||"";model.value=j.model||"";key.value=j.key||"";mmEmail.value=j.mmEmail||"";mmKey.value=j.mmKey||"";preset(false);showBoxes()}catch(e){showBoxes()}}async function save(){const j={translate:trOn.checked,src:src.value,dst:dst.value,provider:p.value,endpoint:ep.value,model:model.value,key:key.value,mmEmail:mmEmail.value,mmKey:mmKey.value};try{await fetch("/settings",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(j)})}catch(e){}}trOn.addEventListener("change",()=>{showBoxes();save()});p.addEventListener("change",()=>{preset(true);showBoxes();save()});[src,dst,ep,model,key,mmEmail,mmKey].forEach(x=>x.addEventListener("change",save));[key,ep,model,mmEmail,mmKey].forEach(x=>x.addEventListener("input",()=>{clearTimeout(timer);timer=setTimeout(save,600)}));async function tr(v){if(p.value!=="mymemory")return trAI(v);let u="https://api.mymemory.translated.net/get?q="+encodeURIComponent(v)+"&langpair="+encodeURIComponent(src.value+"|"+dst.value);if(mmEmail.value)u+="&de="+encodeURIComponent(mmEmail.value);if(mmKey.value)u+="&key="+encodeURIComponent(mmKey.value);let r=await fetch(u);let j=await r.json();return j.responseData&&j.responseData.translatedText?j.responseData.translatedText:""}function chatUrl(){let u=ep.value.trim().replace(/\/+$/,"");return u.endsWith("/chat/completions")?u:u+"/chat/completions"}async function trAI(v){if(!ep.value||!model.value||!key.value)throw Error("missing ai settings");let r=await fetch(chatUrl(),{method:"POST",headers:{"Content-Type":"application/json","Authorization":"Bearer "+key.value},body:JSON.stringify({model:model.value,messages:[{role:"system",content:"Translate the user text to "+dst.value+". Return only the translation."},{role:"user",content:v}]})});let j=await r.json();return j.choices&&j.choices[0]&&j.choices[0].message?j.choices[0].message.content:""}async function sendText(){const v=t.value.trim();if(!v){m.textContent="请输入内容后再发送。";m.className="m e";return}b.disabled=true;m.textContent=trOn.checked?"翻译中...":"发送中...";m.className="m";try{await save();const tv=trOn.checked?await tr(v):"";const out=tv?v+"\n"+tv:v;const r=await fetch("/send",{method:"POST",headers:{"Content-Type":"text/plain;charset=utf-8"},body:out});if(!r.ok)throw Error();t.value="";m.textContent=trOn.checked?"已翻译并发送到 VRChat。":"已发送到 VRChat。";s.textContent="刚刚发送成功"}catch(e){m.textContent=e.message==="missing ai settings"?"请先填写 AI endpoint、model 和 API Key。":trOn.checked?"翻译失败或发送失败。若使用 MyMemory，请尝试填写 email，或点击按钮自行获取 key 后使用。":"发送失败，请确认 VRChat OSC 已开启。";m.className="m e";s.textContent="连接异常"}finally{b.disabled=false;t.focus()}}t.addEventListener("keydown",e=>{if(e.key==="Enter"&&!e.ctrlKey){e.preventDefault();sendText()}});b.addEventListener("click",sendText);lanBtn.addEventListener("click",enableLan);showBoxes();load();</script></body></html>'
 html_len = $ - html
 
 server_socket dd 0
@@ -794,6 +917,7 @@ recv_len dd 0
 session_count dd 0
 shutdown_pending dd 0
 ever_had_session dd 0
+lan_enabled dd 0
 now_tick dd 0
 current_id rb 32
 sessions rb session_slots * 32
@@ -855,7 +979,9 @@ include '..\tools\fasm\include\api\wsock32.inc'
 section '.rsrc' resource data readable
 
 directory RT_ICON,icons,\
-          RT_GROUP_ICON,group_icons
+          RT_GROUP_ICON,group_icons,\
+          RT_VERSION,versions,\
+          RT_MANIFEST,manifests
 
 resource icons,\
          1,LANG_NEUTRAL,app_icon_16,\
@@ -865,7 +991,37 @@ resource icons,\
 resource group_icons,\
          1,LANG_NEUTRAL,app_icon_group
 
+resource versions,\
+         1,LANG_NEUTRAL,version_info
+
+resource manifests,\
+         1,LANG_NEUTRAL,app_manifest
+
 icon app_icon_group,\
      app_icon_16,'assets\icon-gpt-16.ico',\
      app_icon_32,'assets\icon-gpt-q8-32.ico',\
      app_icon_48,'assets\icon-gpt-q8-48.ico'
+
+versioninfo version_info,VOS_NT_WINDOWS32,VFT_APP,VFT2_UNKNOWN,0409h,04E4h,\
+            'CompanyName','nodejs-osc-VRChat-chatbox',\
+            'FileDescription','VRChat Chatbox OSC local helper',\
+            'FileVersion','1.0.0.0',\
+            'InternalName','vrc-chatbox-osc.exe',\
+            'OriginalFilename','vrc-chatbox-osc.exe',\
+            'ProductName','VRC Chatbox OSC',\
+            'ProductVersion','1.0.0.0'
+
+resdata app_manifest
+  db '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>',13,10
+  db '<assembly xmlns="urn:schemas-microsoft-com:asm.v1" manifestVersion="1.0">',13,10
+  db '  <assemblyIdentity version="1.0.0.0" processorArchitecture="x86" name="VRCChatboxOSC" type="win32"/>',13,10
+  db '  <description>VRChat Chatbox OSC local helper</description>',13,10
+  db '  <trustInfo xmlns="urn:schemas-microsoft-com:asm.v3">',13,10
+  db '    <security>',13,10
+  db '      <requestedPrivileges>',13,10
+  db '        <requestedExecutionLevel level="asInvoker" uiAccess="false"/>',13,10
+  db '      </requestedPrivileges>',13,10
+  db '    </security>',13,10
+  db '  </trustInfo>',13,10
+  db '</assembly>'
+endres

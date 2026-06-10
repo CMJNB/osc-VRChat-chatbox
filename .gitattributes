@@ -1,0 +1,7 @@
+*.asm text working-tree-encoding=UTF-8 eol=crlf
+*.bat text working-tree-encoding=UTF-8 eol=crlf
+*.md text working-tree-encoding=UTF-8 eol=crlf
+*.inc text working-tree-encoding=UTF-8 eol=crlf
+
+*.exe binary
+*.ico binary

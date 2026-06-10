@@ -8,10 +8,11 @@ This version has been rewritten from Node.js to 32-bit Win32 assembly and is bui
 
 ## Features
 
-- Single executable release, currently about 15 KB.
+- Single executable release, currently about 23 KB.
 - Uses the system default browser for the UI.
-- LAN access: the server listens on `0.0.0.0:19001`.
-- The page shows the LAN access URL for phones or other devices on the same network.
+- By default, access is local-only and the server listens on `127.0.0.1:19001`.
+- The page provides an "Allow LAN access" button. Only after the user explicitly enables it does the server listen on `0.0.0.0:19001`.
+- After LAN access is enabled, the page shows the LAN access URL for phones or other devices on the same network.
 - The LAN address is selected only from common private IPv4 ranges: `192.168.0.0/16`, `10.0.0.0/8`, and `172.16.0.0/12`.
 - Sends OSC to VRChat at `127.0.0.1:9000` with address `/chatbox/input`.
 - Default source language is Chinese, default target language is English.
@@ -93,13 +94,13 @@ This file may contain your API key or MyMemory key. Do not copy it, upload it, c
 5. Type text and press `Enter` to translate and send.
 6. Press `Ctrl + Enter` for a newline.
 
-The LAN URL is shown at the top of the page. You can also open this manually on another device in the same network:
+To use phones or other LAN devices, click "Allow LAN access" at the top of the page first. After it is enabled, the page shows the access URL. You can also open this manually on another device in the same network:
 
 ```text
 http://<this-pc-lan-ip>:19001
 ```
 
-Windows Firewall may ask for network permission on first run. Allow it if you need LAN access.
+Windows Firewall may ask for network permission when LAN access is first enabled. Allow it if you need LAN access.
 
 ## Build
 
