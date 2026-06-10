@@ -1003,7 +1003,7 @@ icon app_icon_group,\
      app_icon_48,'assets\icon-gpt-q8-48.ico'
 
 versioninfo version_info,VOS_NT_WINDOWS32,VFT_APP,VFT2_UNKNOWN,0409h,04E4h,\
-            'CompanyName','nodejs-osc-VRChat-chatbox',\
+            'CompanyName','osc-VRChat-chatbox',\
             'FileDescription','VRChat Chatbox OSC local helper',\
             'FileVersion','1.0.0.0',\
             'InternalName','vrc-chatbox-osc.exe',\
