@@ -28,7 +28,7 @@ This version has been rewritten from Node.js to 32-bit Win32 assembly and is bui
 - Page heartbeat: each page creates its own session id and sends periodic heartbeats.
 - The background service does not exit automatically when pages are closed or heartbeats stop; use the tray menu to exit it.
 - If an old service is already running, launching the exe again skips server startup and only opens the existing page.
-- The page keeps sent history in browser localStorage and in `history.json` beside the executable. The history limit is configurable in Settings. The history sits below the send status text and scrolls when it exceeds its maximum height. Click a history item to restore the original text. Long-press a history item to restore the content to be sent, then click Send manually, or export the history to a text file.
+- The page keeps sent history in browser localStorage and in `history.json` beside the executable. The history limit is configurable in Settings. The history sits below the send status text and scrolls when it exceeds its maximum height. Click a history item to fill original + translation; edits send as typed without auto-translating. Long-press a history item to resend directly, or export the history to a text file.
 
 ## Supported AI APIs
 
@@ -94,7 +94,7 @@ This file may contain your API key or MyMemory key. Do not copy it, upload it, c
 6. Type text and press `Enter` to send or translate and send.
 7. Press `Shift + Enter` for a newline.
 8. Click "Clear" to clear the input box and turn typing state off.
-9. Click a history item to restore its original text, or long-press it to resend it.
+9. Click a history item to fill original + translation; edits send as typed without auto-translating. Long-press it to resend directly.
 
 To use phones or other LAN devices, click "Allow LAN access" at the top of the page first. After it is enabled, the page shows the access URL and a QR button. Scan it or open this manually on another device in the same network. If the QR address points to a virtual or wrong adapter, use the QR dialog dropdown to choose a detected LAN address, current-access address, or saved address, or manually enter the correct IP, host name, or full URL; the page remembers the last selected or entered value:
 
