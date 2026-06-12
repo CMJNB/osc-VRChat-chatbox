@@ -151,3 +151,7 @@ vrc-chatbox-osc.exe
 ```
 
 Do not include `settings.json` in a release package.
+
+## License
+
+MIT License. See [LICENSE](LICENSE).

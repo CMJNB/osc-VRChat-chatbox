@@ -151,3 +151,7 @@ vrc-chatbox-osc.exe
 ```
 
 不要把 `settings.json` 放进发布包。
+
+## License
+
+MIT License. See [LICENSE](LICENSE).
