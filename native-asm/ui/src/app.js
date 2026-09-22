@@ -59,9 +59,18 @@ const byId = (id) => document.getElementById(id),
   startMinimized = byId("startMinimized"),
   clearBtn = byId("clearBtn"),
   clearBubble = byId("clearBubble"),
+  copyTextBtn = byId("copyTextBtn"),
+  qtTitle = byId("qtTitle"),
+  qtSelect = byId("qtSelect"),
+  qtSend = byId("qtSend"),
+  qtCopy = byId("qtCopy"),
+  qtInput = byId("qtInput"),
+  qtAdd = byId("qtAdd"),
+  qtList = byId("qtList"),
+  qtHint = byId("qtHint"),
   notifySfx = byId("notifySfx"),
+  typingOn = byId("typingOn"),
   count = byId("cnt"),
-  hbar = byId("hbar"),
   hnote = byId("hnote"),
   exportHistory = byId("exportHistory"),
   clearHistory = byId("clearHistory"),
@@ -88,6 +97,7 @@ const byId = (id) => document.getElementById(id),
 let timer = 0,
   promptTimer = 0,
   typingTimer = 0,
+  typingVisible = false, // last typing state reported to the server
   history = [],
   hidCounter = 0,
   tapTimer = 0,
@@ -129,11 +139,13 @@ function normLanUrl(v) {
 }
 const historyKey = "vrcChatboxHistory",
   historyLimitKey = "vrcChatboxHistoryLimit",
-  lanUrlKey = "vrcChatboxLanUrl";
+  lanUrlKey = "vrcChatboxLanUrl",
+  quickTextKey = "vrcChatboxQuickText";
 const SYSTEM_PROMPT_ID = "",
   PROMPT_LIMIT = 6,
   PROMPT_CONTENT_LIMIT = 2500,
   GLOSSARY_LIMIT = 2000,
+  QUICK_TEXT_MAX = 20,
   DEFAULT_GLOSSARY = aiGlossary.value.trim(),
   DEFAULT_AI_PROMPT =
     "You are a translation engine. Translate the user text from {source} to {target}. Return only the translated text, with no quotes, labels, or commentary. If the input contains no translatable natural-language text or cannot be translated, return the original text unchanged.",
@@ -360,6 +372,28 @@ const I18N = {
     send: "发送",
     directSend: "直接发送",
     translateSend: "翻译发送",
+    quickText: "常用文本",
+    quickTextPlaceholder: "添加常用短语或链接...",
+    quickTextHint:
+      "常用文本按原样发送，不参与翻译；只保存在本机，用于快速发送问候语或复制链接。",
+    quickTextEmptyOption: "常用文本（在设置中添加）",
+    quickTextEmptyHint: "暂无常用文本，可在设置中添加。",
+    copy: "复制",
+    copyText: "复制文本",
+    copiedText: "已复制到剪贴板。",
+    copiedQuickText: "已复制常用文本。",
+    copyFail: "复制失败，请重试。",
+    notifySfx: "提示音",
+    typingOn: "输入状态",
+    sectGeneral: "常规",
+    sectNetwork: "网络",
+    sectTranslate: "翻译",
+    sectCommonText: "常用文本",
+    sectHistory: "历史记录",
+    clearBubble: "清除气泡",
+    clearingBubble: "清除中...",
+    bubbleCleared: "已清除气泡。",
+    bubbleClearFail: "清除失败。",
     clear: "清空",
     clearHistory: "清空历史",
     deleteHistory: "删除历史项",
@@ -403,7 +437,7 @@ const I18N = {
       "已填入历史发送内容，可编辑后手动发送",
     exportHistory: "导出历史",
     historyTapHint:
-      "单击填入对应栏（原文/译文），双击填入两者；短按发送对应栏，长按（进度条满）一起发送。",
+      "历史记录用于重发错过的消息或翻译结果；单击填入对应栏（原文/译文），双击填入两者；短按发送对应栏，长按（进度条满）一起发送。",
     resending: "重发中...",
     resent: "已重发到 VRChat。",
     resentStatus: "刚刚重发成功",
@@ -473,6 +507,28 @@ const I18N = {
     send: "Send",
     directSend: "Direct send",
     translateSend: "Translate + send",
+    quickText: "Common text",
+    quickTextPlaceholder: "Add a common phrase or link...",
+    quickTextHint:
+      "Common text is sent as-is without translation and is stored on this device only. Use it for greetings or links.",
+    quickTextEmptyOption: "Common text (add in Settings)",
+    quickTextEmptyHint: "No common text yet. Add one in Settings.",
+    copy: "Copy",
+    copyText: "Copy text",
+    copiedText: "Copied to clipboard.",
+    copiedQuickText: "Common text copied.",
+    copyFail: "Copy failed. Try again.",
+    notifySfx: "Notification sound",
+    typingOn: "Typing indicator",
+    sectGeneral: "General",
+    sectNetwork: "Network",
+    sectTranslate: "Translation",
+    sectCommonText: "Common text",
+    sectHistory: "History",
+    clearBubble: "Clear bubble",
+    clearingBubble: "Clearing...",
+    bubbleCleared: "Bubble cleared.",
+    bubbleClearFail: "Failed to clear.",
     clear: "Clear",
     clearHistory: "Clear history",
     deleteHistory: "Delete history item",
@@ -518,7 +574,7 @@ const I18N = {
       "History content restored. Edit if needed, then send manually.",
     exportHistory: "Export history",
     historyTapHint:
-      "Tap a column to fill it (source/translation); double-tap fills both. Short press sends that column; long press (full bar) sends both.",
+      "History resends missed messages or translations. Tap a column to fill it (source/translation); double-tap fills both. Short press sends that column; long press (full bar) sends both.",
     resending: "Resending...",
     resent: "Resent to VRChat.",
     resentStatus: "Resent just now",
@@ -588,6 +644,28 @@ const I18N = {
     send: "送信",
     directSend: "直接送信",
     translateSend: "翻訳して送信",
+    quickText: "よく使うテキスト",
+    quickTextPlaceholder: "よく使うフレーズやリンクを追加...",
+    quickTextHint:
+      "よく使うテキストは翻訳されずそのまま送信され、この端末にのみ保存されます。挨拶やリンク用です。",
+    quickTextEmptyOption: "よく使うテキスト（設定で追加）",
+    quickTextEmptyHint: "まだありません。設定で追加できます。",
+    copy: "コピー",
+    copyText: "テキストをコピー",
+    copiedText: "クリップボードにコピーしました。",
+    copiedQuickText: "よく使うテキストをコピーしました。",
+    copyFail: "コピーに失敗しました。再試行してください。",
+    typingOn: "入力状態",
+    notifySfx: "通知音",
+    sectGeneral: "一般",
+    sectNetwork: "ネットワーク",
+    sectTranslate: "翻訳",
+    sectCommonText: "よく使うテキスト",
+    sectHistory: "履歴",
+    clearBubble: "バブルを消去",
+    clearingBubble: "消去中...",
+    bubbleCleared: "バブルを消去しました。",
+    bubbleClearFail: "消去に失敗しました。",
     clear: "クリア",
     clearHistory: "履歴をクリア",
     deleteHistory: "履歴項目を削除",
@@ -631,7 +709,7 @@ const I18N = {
     historyResendReady: "履歴の内容を入力欄に戻しました。必要なら編集して手動で送信してください。",
     exportHistory: "履歴をエクスポート",
     historyTapHint:
-      "タップで対応する欄（原文/翻訳）を入力、ダブルタップで両方入力。短押しでその欄を送信、長押し（バー満タン）で両方送信。",
+      "履歴は見逃したメッセージや翻訳の再送用です。タップで対応する欄（原文/翻訳）を入力、ダブルタップで両方入力。短押しでその欄を送信、長押し（バー満タン）で両方送信。",
     resending: "再送信中...",
     resent: "VRChatへ再送信しました。",
     resentStatus: "再送信しました",
@@ -686,6 +764,28 @@ const I18N = {
     promptUntitled: "이름 없는 프롬프트",
     promptLimit: "프롬프트는 최대 6개까지 저장할 수 있습니다.",
     promptDeleteConfirm: "현재 프롬프트를 삭제할까요?",
+    quickText: "자주 쓰는 텍스트",
+    quickTextPlaceholder: "자주 쓰는 문구나 링크 추가...",
+    quickTextHint:
+      "자주 쓰는 텍스트는 번역 없이 그대로 전송되며 이 기기에만 저장됩니다. 인사말이나 링크용입니다.",
+    quickTextEmptyOption: "자주 쓰는 텍스트 (설정에서 추가)",
+    quickTextEmptyHint: "아직 없습니다. 설정에서 추가할 수 있습니다.",
+    copy: "복사",
+    copyText: "텍스트 복사",
+    copiedText: "클립보드에 복사했습니다.",
+    copiedQuickText: "자주 쓰는 텍스트를 복사했습니다.",
+    copyFail: "복사 실패. 다시 시도하세요.",
+    typingOn: "입력 상태",
+    notifySfx: "알림음",
+    sectGeneral: "일반",
+    sectNetwork: "네트워크",
+    sectTranslate: "번역",
+    sectCommonText: "자주 쓰는 텍스트",
+    sectHistory: "히스토리",
+    clearBubble: "버블 지우기",
+    clearingBubble: "지우는 중...",
+    bubbleCleared: "버블을 지웠습니다.",
+    bubbleClearFail: "지우기 실패.",
     promptSaved: "저장됨",
     promptDirty: "저장되지 않은 변경",
     promptSaving: "저장 중...",
@@ -745,7 +845,7 @@ const I18N = {
       "히스토리 내용을 입력창에 넣었습니다. 필요하면 수정 후 수동으로 전송하세요.",
     exportHistory: "히스토리 내보내기",
     historyTapHint:
-      "클릭하면 해당 칸(원문/번역) 입력, 더블클릭하면 둘 다 입력. 짧게 누르면 해당 칸 전송, 길게(진행바 가득) 누르면 둘 다 전송.",
+      "히스토리는 놓친 메시지나 번역을 다시 보내는 기능입니다. 클릭하면 해당 칸(원문/번역) 입력, 더블클릭하면 둘 다 입력. 짧게 누르면 해당 칸 전송, 길게(진행바 가득) 누르면 둘 다 전송.",
     resending: "재전송 중...",
     resent: "VRChat에 재전송했습니다.",
     resentStatus: "방금 재전송됨",
@@ -844,6 +944,24 @@ function applyLang() {
   tx(clearBtn, "clear");
   tx(exportHistory, "exportHistory");
   tx(hnote, "historyTapHint");
+  tx(qtTitle, "quickText");
+  tx(qtHint, "quickTextHint");
+  tx(qtSend, "send");
+  tx(qtCopy, "copy");
+  tx(copyTextBtn, "copyText");
+  tx(clearBubble, "clearBubble");
+  tx(clearHistory, "clearHistory");
+  lab(notifySfx, "notifySfx");
+  lab(typingOn, "typingOn");
+  tx(byId("sectGeneral"), "sectGeneral");
+  tx(byId("sectNetwork"), "sectNetwork");
+  tx(byId("sectTranslate"), "sectTranslate");
+  tx(byId("sectCommonText"), "sectCommonText");
+  tx(byId("sectHistory"), "sectHistory");
+  qtInput.placeholder = L("quickTextPlaceholder");
+  qtInput.setAttribute("aria-label", L("quickText"));
+  qtSelect.setAttribute("aria-label", L("quickText"));
+  renderQuickTexts();
   renderPromptManager();
   setLanState(qrBtn.dataset.ip || "127.0.0.1", qrBtn.dataset.fail === "1");
   showBoxes();
@@ -893,6 +1011,13 @@ function beat() {
 beat();
 setInterval(beat, 3000);
 function setTyping(on) {
+  // 设置里关闭“输入状态”后不再上报 typing=true；但已经上报过的状态仍然要补发
+  // 一次 typing=false，否则 VRChat 一侧的输入指示会一直残留。
+  if (!typingOn.checked) {
+    if (!typingVisible) return;
+    on = false;
+  }
+  typingVisible = on;
   // Single request per state change: sendBeacon + fetch would double-send
   // the "false" close signal on every stop-typing transition.
   if (!on) {
@@ -1359,6 +1484,7 @@ async function load() {
     format.value = j.format || format.value;
     bothOrder.value = normalizedOrder(j.bothOrder);
     notifySfx.checked = j.notifySfx !== false;
+    typingOn.checked = j.typingOn !== false;
     syncSettingsFromQuick();
     uiLang.value = j.uiLang || "auto";
     lang = pickLang(uiLang.value);
@@ -1398,6 +1524,7 @@ async function save() {
     format: format.value,
     bothOrder: normalizedOrder(bothOrder.value),
     notifySfx: notifySfx.checked,
+    typingOn: typingOn.checked,
     uiLang: uiLang.value,
     startup: startup.checked,
     startMinimized: startMinimized.checked,
@@ -1430,6 +1557,11 @@ notifySfx.addEventListener("change", function () {
     method: "POST",
     body: notifySfx.checked ? "true" : "false",
   }).catch(function () {});
+  save();
+});
+typingOn.addEventListener("change", function () {
+  // 关闭时立刻补发一次 typing=false，清掉已经显示出来的输入指示。
+  if (!typingOn.checked) setTyping(false);
   save();
 });
 trOn.addEventListener("change", () => {
@@ -1584,9 +1716,9 @@ async function trAI(v, withCorrection) {
     ? parseCorrectionResult(content, v)
     : { corrected: v, translated: String(content || "").trim() };
 }
-async function sendText(direct) {
+async function sendText(direct, overrideText) {
   if (busy) return;
-  const v = text.value.trim();
+  const v = (overrideText !== undefined ? overrideText : text.value).trim();
   if (!v) {
     message.textContent = L("empty");
     message.className = "m e";
@@ -1648,12 +1780,16 @@ async function sendText(direct) {
     prependHistoryItem(h);
     trimHistory();
     saveHistory();
-    text.value = "";
-    count.textContent = "0/144";
-    count.style.color = "#9ca3af";
-    clearInterval(typingTimer);
-    typingTimer = 0;
-    setTyping(false);
+    // Only reset the box when the box content was actually sent. A quick-text
+    // send passes its own value and must leave the user's draft untouched.
+    if (overrideText === undefined) {
+      text.value = "";
+      count.textContent = "0/144";
+      count.style.color = "#9ca3af";
+      clearInterval(typingTimer);
+      typingTimer = 0;
+      setTyping(false);
+    }
     message.textContent = correctionApplied
       ? L("sentCorrected")
       : tv
@@ -1680,6 +1816,187 @@ async function sendText(direct) {
     text.focus();
   }
 }
+async function copyTextValue(value, okKey) {
+  const content = (value === undefined || value === null ? text.value : value).trim();
+  if (!content) {
+    message.textContent = L("empty");
+    message.className = "m e";
+    text.focus();
+    return false;
+  }
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      await navigator.clipboard.writeText(content);
+    } else {
+      const helper = document.createElement("textarea");
+      helper.value = content;
+      helper.setAttribute("readonly", "");
+      helper.style.position = "fixed";
+      helper.style.opacity = "0";
+      document.body.appendChild(helper);
+      helper.select();
+      document.execCommand("copy");
+      helper.remove();
+    }
+    message.textContent = L(okKey || "copiedText");
+    message.className = "m";
+    return true;
+  } catch (e) {
+    message.textContent = L("copyFail");
+    message.className = "m e";
+    return false;
+  }
+}
+
+/* 常用文本（短语 / 链接）只保存在本机，定位是“存储”：
+   - 主页面只保留一行 [下拉选择] [发送] [复制]，条目再多也不会变高；
+   - 增删管理放在设置里，避免和发送/复制按钮重复。 */
+let quickTexts = [];
+function newQuickTextId() {
+  return (
+    "qt-" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6)
+  );
+}
+function quickTextById(id) {
+  for (let i = 0; i < quickTexts.length; i++)
+    if (quickTexts[i].id === id) return quickTexts[i];
+  return null;
+}
+function selectedQuickText() {
+  return quickTextById(qtSelect.value);
+}
+/* 下拉标签会被截断（超过 42 字符加省略号），所以悬停时用 title 显示完整内容，
+   避免只看到一半内容猜不出这条常用文本是什么。 */
+function syncQuickTextPreview() {
+  const item = selectedQuickText();
+  qtSelect.title = item ? item.text : "";
+  for (let i = 0; i < qtSelect.options.length; i++) {
+    const entry = quickTextById(qtSelect.options[i].value);
+    qtSelect.options[i].title = entry ? entry.text : "";
+  }
+}
+function loadQuickTexts() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(quickTextKey) || "[]");
+    quickTexts = Array.isArray(parsed)
+      ? parsed
+          .filter(
+            (item) => item && typeof item.text === "string" && item.text.trim(),
+          )
+          .map((item) => ({
+            id: typeof item.id === "string" && item.id ? item.id : newQuickTextId(),
+            text: item.text.trim(),
+          }))
+      : [];
+  } catch (e) {
+    quickTexts = [];
+  }
+  renderQuickTexts();
+}
+function saveQuickTexts() {
+  try {
+    localStorage.setItem(
+      quickTextKey,
+      JSON.stringify(quickTexts.slice(0, QUICK_TEXT_MAX)),
+    );
+  } catch (e) {}
+}
+/* preferId 让调用方指定要选中的条目：先定下选中项再同步预览，
+   否则程序化修改 qtSelect.value（不触发 change）会让悬停预览停在旧条目上。 */
+function renderQuickTexts(preferId) {
+  const previous = preferId || qtSelect.value;
+  qtSelect.innerHTML = "";
+  if (!quickTexts.length) {
+    qtSelect.add(new Option(L("quickTextEmptyOption"), ""));
+  } else {
+    for (let i = 0; i < quickTexts.length; i++) {
+      const label = quickTexts[i].text.replace(/\s+/g, " ");
+      qtSelect.add(
+        new Option(label.length > 42 ? label.slice(0, 41) + "…" : label, quickTexts[i].id),
+      );
+    }
+    qtSelect.value = quickTextById(previous) ? previous : quickTexts[0].id;
+  }
+  const has = !!selectedQuickText();
+  qtSend.disabled = !has;
+  qtCopy.disabled = !has;
+  syncQuickTextPreview();
+  renderQuickTextManager();
+}
+function renderQuickTextManager() {
+  qtList.innerHTML = quickTexts.length
+    ? quickTexts
+        .map(function (item) {
+          const label = esc(item.text).replace(/\n/g, " ");
+          return (
+            '<div class="qt-item"><span class="label" title="' +
+            label +
+            '">' +
+            label +
+            '</span><button type="button" class="r" data-qt="delete" data-id="' +
+            esc(item.id) +
+            '">' +
+            esc(L("deletePrompt")) +
+            "</button></div>"
+          );
+        })
+        .join("")
+    : '<div class="qt-empty">' + esc(L("quickTextEmptyHint")) + "</div>";
+}
+function addQuickText(rawText) {
+  const value = String(rawText || "").trim();
+  if (!value) return;
+  const existing = quickTexts.filter(function (item) {
+    return item.text === value;
+  })[0];
+  qtInput.value = "";
+  // Identical text is already stored: select it instead of adding a duplicate.
+  if (existing) {
+    renderQuickTexts(existing.id);
+    return;
+  }
+  const entry = { id: newQuickTextId(), text: value };
+  quickTexts.unshift(entry);
+  quickTexts = quickTexts.slice(0, QUICK_TEXT_MAX);
+  saveQuickTexts();
+  renderQuickTexts(entry.id);
+}
+qtSelect.addEventListener("change", function () {
+  qtSend.disabled = !selectedQuickText();
+  qtCopy.disabled = !selectedQuickText();
+  syncQuickTextPreview();
+});
+qtSend.addEventListener("click", function () {
+  const item = selectedQuickText();
+  // 常用文本是静态文本：始终按原样直发，不经过翻译或原文纠正。
+  // 需要别的语言时，直接再存一条对应语言的文本即可。
+  if (item) sendText(true, item.text);
+});
+qtCopy.addEventListener("click", function () {
+  const item = selectedQuickText();
+  if (item) copyTextValue(item.text, "copiedQuickText");
+});
+qtAdd.addEventListener("click", function () {
+  addQuickText(qtInput.value);
+});
+qtInput.addEventListener("keydown", function (e) {
+  if (e.key === "Enter") {
+    e.preventDefault();
+    addQuickText(qtInput.value);
+  }
+});
+qtList.addEventListener("click", function (e) {
+  const btn = e.target.closest('button[data-qt="delete"]');
+  if (!btn) return;
+  quickTexts = quickTexts.filter(function (entry) {
+    return entry.id !== btn.dataset.id;
+  });
+  saveQuickTexts();
+  renderQuickTexts();
+});
+copyTextBtn.addEventListener("click", function () {
+  copyTextValue(text.value);
+});
 text.addEventListener("keydown", (e) => {
   if (e.key === "Enter" && !e.shiftKey) {
     e.preventDefault();
@@ -1754,7 +2071,7 @@ clearBubble.addEventListener("click", async function () {
   busy = true;
   button.disabled = true;
   trButton.disabled = true;
-  message.textContent = "清除中...";
+  message.textContent = L("clearingBubble");
   message.className = "m";
   try {
     var r = await fetch("/send", {
@@ -1763,10 +2080,10 @@ clearBubble.addEventListener("click", async function () {
       body: "",
     });
     if (!r.ok) throw Error();
-    message.textContent = "已清除气泡。";
+    message.textContent = L("bubbleCleared");
     status.textContent = L("sentStatus");
   } catch (e) {
-    message.textContent = "清除失败。";
+    message.textContent = L("bubbleClearFail");
     message.className = "m e";
     status.textContent = L("badConn");
   } finally {
@@ -1811,8 +2128,9 @@ async function loadHistory() {
   }
 }
 function syncHistoryBar() {
+  // The toolbar buttons moved into the settings panel, so only the gesture
+  // hint is toggled here; it is meaningless with an empty history list.
   var on = history.length;
-  hbar.className = on ? "hbar" : "hbar hide";
   hnote.className = on ? "hnote" : "hnote hide";
 }
 function renderHistory() {
@@ -2051,6 +2369,7 @@ function delHistory(hid) {
 syncStartup();
 syncSettingsFromQuick();
 loadHistory();
+loadQuickTexts();
 applyLang();
 loadPrompts();
 load();
