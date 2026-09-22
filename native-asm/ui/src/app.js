@@ -66,6 +66,8 @@ const byId = (id) => document.getElementById(id),
   qtCopy = byId("qtCopy"),
   qtInput = byId("qtInput"),
   qtAdd = byId("qtAdd"),
+  qtCancel = byId("qtCancel"),
+  qtCount = byId("qtCount"),
   qtList = byId("qtList"),
   qtHint = byId("qtHint"),
   notifySfx = byId("notifySfx"),
@@ -145,7 +147,9 @@ const SYSTEM_PROMPT_ID = "",
   PROMPT_LIMIT = 6,
   PROMPT_CONTENT_LIMIT = 2500,
   GLOSSARY_LIMIT = 2000,
-  QUICK_TEXT_MAX = 20,
+  QUICK_TEXT_MAX = 100,
+  // quicktext.json 的字节上限（asm 侧 quicktext_max_size = 32768），留余量先自己拦。
+  QUICK_TEXT_BYTES_MAX = 30000,
   DEFAULT_GLOSSARY = aiGlossary.value.trim(),
   DEFAULT_AI_PROMPT =
     "You are a translation engine. Translate the user text from {source} to {target}. Return only the translated text, with no quotes, labels, or commentary. If the input contains no translatable natural-language text or cannot be translated, return the original text unchanged.",
@@ -374,10 +378,19 @@ const I18N = {
     translateSend: "翻译发送",
     quickText: "常用文本",
     quickTextPlaceholder: "添加常用短语或链接...",
+    quickTextAdd: "添加",
     quickTextHint:
-      "常用文本按原样发送，不参与翻译；只保存在本机，用于快速发送问候语或复制链接。",
+      "常用文本按原样发送，不参与翻译；保存在本机应用数据里，并缓存在当前浏览器。",
     quickTextEmptyOption: "常用文本（在设置中添加）",
     quickTextEmptyHint: "暂无常用文本，可在设置中添加。",
+    quickTextEdit: "编辑",
+    quickTextSave: "保存",
+    quickTextCancel: "取消",
+    quickTextCount: "已保存 {n}/{max} 条",
+    quickTextFull: "已达上限 {max} 条，新增会丢弃最旧的一条。",
+    quickTextTooLarge:
+      "常用文本总量过大，无法保存到本机文件。请缩短内容或删除部分条目。",
+    quickTextLocalOnly: "未能保存到本机文件，暂时只保存在当前浏览器。",
     copy: "复制",
     copyText: "复制文本",
     copiedText: "已复制到剪贴板。",
@@ -509,10 +522,20 @@ const I18N = {
     translateSend: "Translate + send",
     quickText: "Common text",
     quickTextPlaceholder: "Add a common phrase or link...",
+    quickTextAdd: "Add",
     quickTextHint:
-      "Common text is sent as-is without translation and is stored on this device only. Use it for greetings or links.",
+      "Common text is sent as-is without translation and is stored in the app's local data (cached in this browser). Use it for greetings or links.",
     quickTextEmptyOption: "Common text (add in Settings)",
     quickTextEmptyHint: "No common text yet. Add one in Settings.",
+    quickTextEdit: "Edit",
+    quickTextSave: "Save",
+    quickTextCancel: "Cancel",
+    quickTextCount: "{n}/{max} saved",
+    quickTextFull: "Limit of {max} reached; adding an entry drops the oldest one.",
+    quickTextTooLarge:
+      "Common text is too large to save to the local data file. Shorten an entry or delete some.",
+    quickTextLocalOnly:
+      "Could not save to the local data file; kept in this browser only.",
     copy: "Copy",
     copyText: "Copy text",
     copiedText: "Copied to clipboard.",
@@ -646,10 +669,20 @@ const I18N = {
     translateSend: "翻訳して送信",
     quickText: "よく使うテキスト",
     quickTextPlaceholder: "よく使うフレーズやリンクを追加...",
+    quickTextAdd: "追加",
     quickTextHint:
-      "よく使うテキストは翻訳されずそのまま送信され、この端末にのみ保存されます。挨拶やリンク用です。",
+      "よく使うテキストは翻訳されずそのまま送信され、アプリのローカルデータに保存されます（このブラウザにもキャッシュ）。",
     quickTextEmptyOption: "よく使うテキスト（設定で追加）",
     quickTextEmptyHint: "まだありません。設定で追加できます。",
+    quickTextEdit: "編集",
+    quickTextSave: "保存",
+    quickTextCancel: "キャンセル",
+    quickTextCount: "{n}/{max} 件保存済み",
+    quickTextFull: "上限 {max} 件に達しました。追加すると最も古い項目が削除されます。",
+    quickTextTooLarge:
+      "よく使うテキストの合計が大きすぎてローカルファイルに保存できません。内容を短くするか項目を削除してください。",
+    quickTextLocalOnly:
+      "ローカルファイルに保存できませんでした。このブラウザにのみ保存されています。",
     copy: "コピー",
     copyText: "テキストをコピー",
     copiedText: "クリップボードにコピーしました。",
@@ -766,10 +799,20 @@ const I18N = {
     promptDeleteConfirm: "현재 프롬프트를 삭제할까요?",
     quickText: "자주 쓰는 텍스트",
     quickTextPlaceholder: "자주 쓰는 문구나 링크 추가...",
+    quickTextAdd: "추가",
     quickTextHint:
-      "자주 쓰는 텍스트는 번역 없이 그대로 전송되며 이 기기에만 저장됩니다. 인사말이나 링크용입니다.",
+      "자주 쓰는 텍스트는 번역 없이 그대로 전송되며 앱의 로컬 데이터에 저장됩니다(이 브라우저에도 캐시).",
     quickTextEmptyOption: "자주 쓰는 텍스트 (설정에서 추가)",
     quickTextEmptyHint: "아직 없습니다. 설정에서 추가할 수 있습니다.",
+    quickTextEdit: "편집",
+    quickTextSave: "저장",
+    quickTextCancel: "취소",
+    quickTextCount: "{n}/{max}개 저장됨",
+    quickTextFull: "최대 {max}개에 도달했습니다. 추가하면 가장 오래된 항목이 삭제됩니다.",
+    quickTextTooLarge:
+      "자주 쓰는 텍스트의 총량이 너무 커서 로컬 파일에 저장할 수 없습니다. 내용을 줄이거나 항목을 삭제하세요.",
+    quickTextLocalOnly:
+      "로컬 파일에 저장하지 못했습니다. 이 브라우저에만 저장됩니다.",
     copy: "복사",
     copyText: "텍스트 복사",
     copiedText: "클립보드에 복사했습니다.",
@@ -948,6 +991,8 @@ function applyLang() {
   tx(qtHint, "quickTextHint");
   tx(qtSend, "send");
   tx(qtCopy, "copy");
+  // 编辑态下 qtAdd 显示“保存”，所以由 updateQuickTextForm 统一设置。
+  updateQuickTextForm();
   tx(copyTextBtn, "copyText");
   tx(clearBubble, "clearBubble");
   tx(clearHistory, "clearHistory");
@@ -1718,8 +1763,10 @@ async function trAI(v, withCorrection) {
 }
 async function sendText(direct, overrideText) {
   if (busy) return;
-  const v = (overrideText !== undefined ? overrideText : text.value).trim();
-  if (!v) {
+  // 常用文本按原样发送（含首尾空白与换行），只有输入框里的草稿才 trim。
+  const v =
+    overrideText !== undefined ? String(overrideText) : text.value.trim();
+  if (!v.trim()) {
     message.textContent = L("empty");
     message.className = "m e";
     text.focus();
@@ -1817,8 +1864,10 @@ async function sendText(direct, overrideText) {
   }
 }
 async function copyTextValue(value, okKey) {
-  const content = (value === undefined || value === null ? text.value : value).trim();
-  if (!content) {
+  // 与发送一致：显式传入的值（常用文本）原样复制，只有输入框草稿才 trim。
+  const content =
+    value === undefined || value === null ? text.value.trim() : String(value);
+  if (!content.trim()) {
     message.textContent = L("empty");
     message.className = "m e";
     text.focus();
@@ -1875,31 +1924,177 @@ function syncQuickTextPreview() {
     qtSelect.options[i].title = entry ? entry.text : "";
   }
 }
-function loadQuickTexts() {
-  try {
-    const parsed = JSON.parse(localStorage.getItem(quickTextKey) || "[]");
-    quickTexts = Array.isArray(parsed)
-      ? parsed
-          .filter(
-            (item) => item && typeof item.text === "string" && item.text.trim(),
-          )
-          .map((item) => ({
-            id: typeof item.id === "string" && item.id ? item.id : newQuickTextId(),
-            text: item.text.trim(),
-          }))
-      : [];
-  } catch (e) {
-    quickTexts = [];
-  }
-  renderQuickTexts();
+/* 下拉/列表都只能显示一行。把换行标记成 ↵ 再折叠空白，
+   否则“a\nb”和“a b”看起来完全一样，让人误以为换行没被保存。 */
+function quickTextOneLine(text) {
+  return String(text === undefined || text === null ? "" : text)
+    .replace(/\r\n?/g, "\n")
+    .replace(/[^\S\n]+/g, " ")
+    .replace(/ ?\n ?/g, " ↵ ");
 }
-function saveQuickTexts() {
+/* 编辑中的条目 id；空字符串表示添加模式。
+   编辑复用同一个输入框（而不是每行内嵌输入框），DOM 和状态都更少。 */
+let editingQuickTextId = "";
+/* 权威副本是 exe 旁边的 quicktext.json，localStorage 只当首屏缓存：
+   它按 origin 隔离，换端口 / localhost↔127.0.0.1 / 局域网地址 / 换浏览器
+   都会各存一份，看起来就像数据丢了。 */
+let quickTextsTouched = false,
+  quickTextNotice = "";
+/* 按 UTF-8 字节算（中文 3 字节），因为服务端上限是字节数。 */
+function byteLength(s) {
+  if (typeof TextEncoder !== "undefined")
+    return new TextEncoder().encode(s).length;
+  return encodeURIComponent(s).replace(/%[0-9A-Fa-f]{2}/g, "x").length;
+}
+function quickTextsBody(items) {
+  return JSON.stringify({ items: items.slice(0, QUICK_TEXT_MAX) });
+}
+function quickTextsFit(items) {
+  return byteLength(quickTextsBody(items)) <= QUICK_TEXT_BYTES_MAX;
+}
+function writeLocalQuickTexts() {
   try {
     localStorage.setItem(
       quickTextKey,
       JSON.stringify(quickTexts.slice(0, QUICK_TEXT_MAX)),
     );
   } catch (e) {}
+}
+function setQuickTextNotice(key) {
+  quickTextNotice = key || "";
+  updateQuickTextForm();
+}
+/* 服务端与本地缓存的条目都要过一遍同样的清洗：空白条目丢弃、id 去重补全。 */
+function applyQuickTexts(list, preferId) {
+  const src = Array.isArray(list) ? list : [],
+    seen = {};
+  quickTexts = [];
+  for (let i = 0; i < src.length && quickTexts.length < QUICK_TEXT_MAX; i++) {
+    const item = src[i];
+    if (!item || typeof item.text !== "string" || !item.text.trim()) continue;
+    const id =
+      typeof item.id === "string" && item.id && !seen[item.id]
+        ? item.id
+        : newQuickTextId();
+    if (seen[id]) continue;
+    seen[id] = true;
+    quickTexts.push({ id: id, text: item.text });
+  }
+  renderQuickTexts(preferId);
+}
+async function syncQuickTexts() {
+  let data = null;
+  try {
+    const r = await fetch("/quicktext");
+    if (r.ok) data = await r.json();
+  } catch (e) {}
+  // 请求返回前用户已经改过：不要覆盖他刚做的编辑。
+  if (quickTextsTouched) return;
+  const items = data && Array.isArray(data.items) ? data.items : [];
+  if (items.length) {
+    applyQuickTexts(items);
+    writeLocalQuickTexts();
+    return;
+  }
+  // exe 侧还空着（升级后的第一次）：把只存在浏览器里的旧数据迁移过去。
+  if (quickTexts.length) saveQuickTexts();
+}
+function saveQuickTexts() {
+  const items = quickTexts.slice(0, QUICK_TEXT_MAX);
+  writeLocalQuickTexts();
+  if (!quickTextsFit(items)) {
+    setQuickTextNotice("quickTextTooLarge");
+    return;
+  }
+  fetch("/quicktext", {
+    method: "POST",
+    headers: { "Content-Type": "application/json;charset=utf-8" },
+    body: quickTextsBody(items),
+    keepalive: true,
+  })
+    .then(function (r) {
+      if (!r.ok) throw Error();
+      setQuickTextNotice("");
+    })
+    .catch(function () {
+      // 写文件失败时内容仍在本机浏览器里，所以只提示，不丢数据。
+      setQuickTextNotice("quickTextLocalOnly");
+    });
+}
+function updateQuickTextForm() {
+  const editing = !!quickTextById(editingQuickTextId);
+  if (!editing) editingQuickTextId = "";
+  qtAdd.textContent = L(editing ? "quickTextSave" : "quickTextAdd");
+  qtCancel.textContent = L("quickTextCancel");
+  qtCancel.className = editing ? "g" : "g hide";
+  if (quickTextNotice) {
+    qtCount.textContent = L(quickTextNotice);
+    qtCount.className = "qt-count error";
+    return;
+  }
+  qtCount.className = "qt-count";
+  if (!quickTexts.length) {
+    qtCount.textContent = "";
+    return;
+  }
+  const full = quickTexts.length >= QUICK_TEXT_MAX;
+  qtCount.textContent = (
+    full ? L("quickTextFull") : L("quickTextCount")
+  )
+    .replace("{n}", String(quickTexts.length))
+    .replace("{max}", String(QUICK_TEXT_MAX));
+}
+function startQuickTextEdit(id) {
+  const item = quickTextById(id);
+  if (!item) return;
+  editingQuickTextId = id;
+  qtInput.value = item.text;
+  updateQuickTextForm();
+  renderQuickTextManager();
+  qtInput.focus();
+  qtInput.selectionStart = qtInput.selectionEnd = qtInput.value.length;
+}
+function cancelQuickTextEdit() {
+  editingQuickTextId = "";
+  qtInput.value = "";
+  updateQuickTextForm();
+  renderQuickTextManager();
+}
+/* 保存编辑：内容原样写入（不 trim）。空内容视为放弃编辑，而不是删除条目。 */
+function saveQuickTextEdit() {
+  const item = quickTextById(editingQuickTextId);
+  const value = qtInput.value == null ? "" : String(qtInput.value);
+  if (!item || !value.trim()) {
+    cancelQuickTextEdit();
+    return;
+  }
+  const previous = item.text;
+  item.text = value;
+  // 超出字节预算就不落盘，并保留编辑态让用户改短（而不是惄惄截断）。
+  if (!quickTextsFit(quickTexts)) {
+    item.text = previous;
+    setQuickTextNotice("quickTextTooLarge");
+    return;
+  }
+  editingQuickTextId = "";
+  qtInput.value = "";
+  quickTextsTouched = true;
+  setQuickTextNotice("");
+  saveQuickTexts();
+  renderQuickTexts(item.id);
+}
+function loadQuickTexts() {
+  let parsed = [];
+  try {
+    parsed = JSON.parse(localStorage.getItem(quickTextKey) || "[]");
+  } catch (e) {
+    parsed = [];
+  }
+  applyQuickTexts(parsed);
+  // 上限是硬约束（saveQuickTexts 也会截断）。读取时就对齐，避免列表条数
+  // 和“已达上限”提示不一致，也避免用户下次添加时被静默删掉多余条目。
+  if (Array.isArray(parsed) && parsed.length > QUICK_TEXT_MAX) saveQuickTexts();
+  syncQuickTexts();
 }
 /* preferId 让调用方指定要选中的条目：先定下选中项再同步预览，
    否则程序化修改 qtSelect.value（不触发 change）会让悬停预览停在旧条目上。 */
@@ -1910,7 +2105,7 @@ function renderQuickTexts(preferId) {
     qtSelect.add(new Option(L("quickTextEmptyOption"), ""));
   } else {
     for (let i = 0; i < quickTexts.length; i++) {
-      const label = quickTexts[i].text.replace(/\s+/g, " ");
+      const label = quickTextOneLine(quickTexts[i].text);
       qtSelect.add(
         new Option(label.length > 42 ? label.slice(0, 41) + "…" : label, quickTexts[i].id),
       );
@@ -1921,19 +2116,28 @@ function renderQuickTexts(preferId) {
   qtSend.disabled = !has;
   qtCopy.disabled = !has;
   syncQuickTextPreview();
+  updateQuickTextForm();
   renderQuickTextManager();
 }
 function renderQuickTextManager() {
   qtList.innerHTML = quickTexts.length
     ? quickTexts
         .map(function (item) {
-          const label = esc(item.text).replace(/\n/g, " ");
+          // 悬停 title 用原文（含真实换行），行内标签才用 ↵ 的一行版本。
+          const raw = String(item.text).replace(/\r\n?/g, "\n");
+          const label = esc(quickTextOneLine(raw));
           return (
-            '<div class="qt-item"><span class="label" title="' +
-            label +
+            '<div class="qt-item' +
+            (item.id === editingQuickTextId ? " editing" : "") +
+            '"><span class="label" title="' +
+            esc(raw) +
             '">' +
             label +
-            '</span><button type="button" class="r" data-qt="delete" data-id="' +
+            '</span><button type="button" class="g" data-qt="edit" data-id="' +
+            esc(item.id) +
+            '">' +
+            esc(L("quickTextEdit")) +
+            '</button><button type="button" class="r" data-qt="delete" data-id="' +
             esc(item.id) +
             '">' +
             esc(L("deletePrompt")) +
@@ -1944,20 +2148,29 @@ function renderQuickTextManager() {
     : '<div class="qt-empty">' + esc(L("quickTextEmptyHint")) + "</div>";
 }
 function addQuickText(rawText) {
-  const value = String(rawText || "").trim();
-  if (!value) return;
+  // 不做 trim：保留用户输入的首尾空白与换行，只在整条为空白时拒绝。
+  const value = String(rawText === undefined || rawText === null ? "" : rawText);
+  if (!value.trim()) return;
   const existing = quickTexts.filter(function (item) {
     return item.text === value;
   })[0];
-  qtInput.value = "";
   // Identical text is already stored: select it instead of adding a duplicate.
   if (existing) {
+    qtInput.value = "";
     renderQuickTexts(existing.id);
     return;
   }
-  const entry = { id: newQuickTextId(), text: value };
-  quickTexts.unshift(entry);
-  quickTexts = quickTexts.slice(0, QUICK_TEXT_MAX);
+  const entry = { id: newQuickTextId(), text: value },
+    next = [entry].concat(quickTexts).slice(0, QUICK_TEXT_MAX);
+  // 超出字节预算就不接受：提示用户缩短/删除，而不是惄惄让这条不落盘。
+  if (!quickTextsFit(next)) {
+    setQuickTextNotice("quickTextTooLarge");
+    return;
+  }
+  qtInput.value = "";
+  quickTexts = next;
+  quickTextsTouched = true;
+  setQuickTextNotice("");
   saveQuickTexts();
   renderQuickTexts(entry.id);
 }
@@ -1977,20 +2190,38 @@ qtCopy.addEventListener("click", function () {
   if (item) copyTextValue(item.text, "copiedQuickText");
 });
 qtAdd.addEventListener("click", function () {
-  addQuickText(qtInput.value);
+  if (quickTextById(editingQuickTextId)) saveQuickTextEdit();
+  else addQuickText(qtInput.value);
 });
+qtCancel.addEventListener("click", cancelQuickTextEdit);
 qtInput.addEventListener("keydown", function (e) {
-  if (e.key === "Enter") {
+  // Enter 添加/保存；Shift + Enter 在框内换行（常用文本允许包含内部换行）；
+  // Esc 放弃编辑；Ctrl/Cmd + Enter 也当作添加，方便习惯快捷键的用户。
+  if (e.key === "Escape" && quickTextById(editingQuickTextId)) {
     e.preventDefault();
-    addQuickText(qtInput.value);
+    cancelQuickTextEdit();
+    return;
+  }
+  if (e.key === "Enter" && !e.shiftKey) {
+    e.preventDefault();
+    if (quickTextById(editingQuickTextId)) saveQuickTextEdit();
+    else addQuickText(qtInput.value);
   }
 });
 qtList.addEventListener("click", function (e) {
-  const btn = e.target.closest('button[data-qt="delete"]');
+  const btn = e.target.closest("button[data-qt]");
   if (!btn) return;
+  if (btn.dataset.qt === "edit") {
+    startQuickTextEdit(btn.dataset.id);
+    return;
+  }
   quickTexts = quickTexts.filter(function (entry) {
     return entry.id !== btn.dataset.id;
   });
+  // 删掉的正好是编辑中的那条时，退出编辑态，避免保存到一个已不存在的条目。
+  if (editingQuickTextId === btn.dataset.id) cancelQuickTextEdit();
+  quickTextsTouched = true;
+  setQuickTextNotice("");
   saveQuickTexts();
   renderQuickTexts();
 });

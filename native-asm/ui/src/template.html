@@ -163,11 +163,13 @@ FBT</textarea>
                     </div><!-- /sect 翻译 -->
                     <div class="sect">
                         <div class="sect-title" id="sectCommonText">常用文本</div>
-                        <div class="qt-form"><input id="qtInput" type="text"
-                                placeholder="添加常用短语或链接..."><button id="qtAdd" class="x"
-                                type="button">添加</button></div>
+                        <div class="qt-form"><textarea id="qtInput" rows="2"
+                                placeholder="添加常用短语或链接..."></textarea><button id="qtAdd" class="x"
+                                type="button">添加</button><button id="qtCancel" class="g hide"
+                                type="button">取消</button></div>
+                        <div id="qtCount" class="qt-count"></div>
                         <div id="qtList" class="qt-list"></div>
-                        <div id="qtHint" class="field-note">常用文本按原样发送，不参与翻译；只保存在本机，用于快速发送问候语或复制链接。</div>
+                        <div id="qtHint" class="field-note">常用文本按原样发送，不参与翻译；保存在本机应用数据里，并缓存在当前浏览器。</div>
                     </div>
                     <div class="sect">
                         <div class="sect-title" id="sectHistory">历史记录</div>

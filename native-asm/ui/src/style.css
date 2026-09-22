@@ -123,14 +123,24 @@ textarea:focus {
 .qt select { flex: 1 1 auto; width: auto; min-width: 0; padding: 8px 10px; font-size: 13px; }
 .qt button { flex: 0 0 auto; min-width: 0; padding: 8px 12px; font-size: 13px; }
 .qt button:disabled { opacity: 0.5; }
-.qt-form { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; }
-.qt-form input { min-width: 0; font-size: 13px; padding: 9px 10px; }
+.qt-form { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 8px; align-items: end; }
+.qt-form input, .qt-form textarea { min-width: 0; font-size: 13px; padding: 9px 10px; }
+/* 常用文本允许包含换行，所以添加框用 textarea（<input> 会把换行和首尾空白吃掉）。 */
+.qt-form textarea { height: auto; min-height: 60px; max-height: 140px; line-height: 1.45; }
 .qt-form button { min-width: 0; padding: 9px 12px; font-size: 13px; white-space: nowrap; }
+/* 取消按钮平时隐藏。`.qt-form button`（0,1,1）比 `.hide`（0,1,0）更容易胜出，
+   所以必须显式补一条，否则隐藏会在某些环境下失效。 */
+.qt-form button.hide { display: none; }
+.qt-count { margin-top: 8px; color: var(--text2); font-size: 12px; line-height: 1.45; }
+.qt-count:empty { display: none; }
+.qt-count.error { color: var(--error); }
 .qt-list { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; max-height: 190px; overflow-y: auto; }
 .qt-item {
   display: flex; align-items: center; gap: 8px; padding: 6px 8px;
   border: 1px solid var(--border); border-radius: 8px; background: var(--surface);
 }
+/* 正在编辑的那条加个高亮，免得删错/改错行。 */
+.qt-item.editing { border-color: var(--accent); background: var(--accent-bg); }
 /* 文本负责收缩并省略号，删除按钮固定不收缩：否则长文本会把按钮压扁。 */
 .qt-item .label {
   flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis;
@@ -286,7 +296,7 @@ button.r:hover { background: var(--danger-hover); }
   .qt-title { font-size: 11px; }
   .qt select { padding: 8px 6px; font-size: 12px; }
   .qt button { width: auto; padding: 9px 8px; font-size: 12px; }
-  .qt-form { grid-template-columns: minmax(0, 1fr) auto; }
+  .qt-form { grid-template-columns: minmax(0, 1fr) auto auto; }
   .qt-form button { width: auto; padding-inline: 10px; }
   /* 窄屏下全局 button{width:100%} 会把每行的删除按钮撑满整行并把文本压成 0 宽，
      所以常用文本列表里的按钮必须显式回到 auto。 */
